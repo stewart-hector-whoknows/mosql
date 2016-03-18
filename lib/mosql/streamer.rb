@@ -27,6 +27,10 @@ module MoSQL
       if options[:reimport] || tailer.read_position.nil?
         initial_import
       end
+
+      if options[:create_new_tables]
+        create_new_tables_and_import
+      end
     end
 
     def collection_for_ns(ns)
@@ -84,6 +88,29 @@ module MoSQL
       start = Time.now
       yield
       Time.now - start
+    end
+
+    def create_new_tables_and_import
+      new_collections = @schema.get_new_collections(@sql.db)
+      @schema.create_schema(@sql.db, !options[:no_drop_tables])
+      import_data_for_collections(new_collections)
+
+    end
+
+    def import_data_for_collections(importcollections)
+      importcollections.each do | mongodb, collections |
+        collections.each do |  collection |
+          collection.each do | collectionname, spec |
+            ns = "#{mongodb}.#{collectionname}"
+            db = @mongo.db(mongodb)
+            collections = db.collections.select { |c| {collectionname => spec}.key?(c.name) }
+
+            collections.each do | collection|
+              import_collection(ns, collection,{})
+            end
+          end
+        end
+      end
     end
 
     def initial_import
